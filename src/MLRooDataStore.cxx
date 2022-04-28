@@ -29,7 +29,6 @@
 
 // VEGAS includes
 #include "VAException.h"
-#include "VAModel3DData.h"
 #include "VAArrayInfoFactoryLite.h"
 #include "VARootIO.h"
 #include "VARunHeader.h"
@@ -120,8 +119,6 @@ bool MLRooDataStore::fillFromFile(std::string s5, std::string rooname) {
     _isSim = true ;
   }
 
-  std::cout << "is simulation? " << _isSim << std::endl;
-
   TFile* f = TFile::Open(s5.c_str(),"READ");
   TChain *ch = new TChain( "SelectedEvents/CombinedEventsTree" );
   ch->AddFile( s5.c_str() );
@@ -142,8 +139,7 @@ bool MLRooDataStore::fillFromFile(std::string s5, std::string rooname) {
   
   TTreeReader myReader("SelectedEvents/CombinedEventsTree",f);
   TTreeReaderValue<VAShowerData> showDat(myReader, "S");
-  TTreeReaderValue<VAModel3DData> showDatM3D(myReader, "M3D");
-  //ch->SetBranchAddress( "M3D", &sh );                                                                                        
+  //if(itm) {ch->SetBranchAddress( "M3D", &sh );}                                                                                        
   //ch->SetBranchAddress( "S", &sh ); 
   TTreeReaderValue<VASimulationData>* simDat = nullptr ; 
   // If we're dealing with simulations, set the simulation data value
@@ -159,11 +155,11 @@ bool MLRooDataStore::fillFromFile(std::string s5, std::string rooname) {
   while (myReader.Next()) {
     // Skip events which are not passing some of the basic requirements                                                            
     // This is just in case the user hasnt removed cut events                                                                      
-    if (!showDatM3D->fIsDirection || !showDatM3D->fIsCorePosition || !showDatM3D->fIsReconstructed || !showDatM3D->fGoodness3D) continue;
+    if (!showDat->fIsDirection || !showDat->fIsCorePosition || !showDat->fIsReconstructed) continue;
 
     events++;
-    storeoff=storeoff+((showDatM3D->fArrayTrackingDec_J2000_Rad)*r2d);
-    fMSW = showDatM3D->fMSW;
+    storeoff=storeoff+((showDat->fArrayTrackingDec_J2000_Rad)*r2d);
+    fMSW = showDat->fMSW;
     // Find total number of telescopes participating in the event and make sure it passes                                          
     // the telescope requirement cut                                                                                               
     fTels = showDat->fTelUsedInReconstruction.at(0) +
@@ -172,14 +168,14 @@ bool MLRooDataStore::fillFromFile(std::string s5, std::string rooname) {
     showDat->fTelUsedInReconstruction.at(3);
     count++;
 
-    WorldCoor* wcsobj = initWCS((showDatM3D->fArrayTrackingRA_J2000_Rad)*r2d, (showDatM3D->fArrayTrackingDec_J2000_Rad)*r2d, "J2000");
+    WorldCoor* wcsobj = initWCS((showDat->fArrayTrackingRA_J2000_Rad)*r2d, (showDat->fArrayTrackingDec_J2000_Rad)*r2d, "J2000");
     
     if (_isSim) {
       // Note this algorithm is necessary when doing simulations
       // otherwise the computed offset is always 0.5 degrees.
       
-      Coordinate2Projected(showDatM3D->fDirectionRA_J2000_Rad*r2d,
-                           showDatM3D->fDirectionDec_J2000_Rad*r2d,
+      Coordinate2Projected(showDat->fDirectionRA_J2000_Rad*r2d,
+                           showDat->fDirectionDec_J2000_Rad*r2d,
                            _srcRA,
                            _srcDec,
                            &x, &y, "J2000") ;
@@ -196,25 +192,26 @@ bool MLRooDataStore::fillFromFile(std::string s5, std::string rooname) {
       */
       // This is the correct algorithm for projecting the events based
       // on the central tracking position.
-      Coordinate2Projected_Quick(showDatM3D->fDirectionRA_J2000_Rad*r2d,
-				 showDatM3D->fDirectionDec_J2000_Rad*r2d,
+      Coordinate2Projected_Quick(showDat->fDirectionRA_J2000_Rad*r2d,
+				 showDat->fDirectionDec_J2000_Rad*r2d,
 				 wcsobj, &x, &y) ;
     }
     // Check that the event is inside the cut radius
     if ((x*x+y*y) >= 4.0) continue;
+    
     //xvsy->Fill(x,y);
     
     // Extract the event zenith angle                                                                                              
-    zen = 90.0 - ( showDatM3D->fDirectionElevation_Rad * r2d ) ;
+    zen = 90.0 - ( showDat->fDirectionElevation_Rad * r2d ) ;
     cosZen = std::cos(d2r*zen);
-    az = showDatM3D->fDirectionAzimuth_Rad * r2d ;
+    az = showDat->fDirectionAzimuth_Rad * r2d ;
     // Find the camera averaged noise for this event                                                                               
     fNoise = findAverageNoise(&(*showDat), qstats, showDat->fTime) ;
     // Check the reconstructed or true energy (in TeV) is within our limits                                                               
     // If we're reading in a simulation file get the true energy value (in TeV)                                                           
     //if (_isSim && ((*simDat)->fEnergyGeV*0.001)<100) fEtrue = ((*simDat)->fEnergyGeV*0.001) ;
     if (_isSim && ((*simDat)->fEnergyGeV*0.001)<100) fEtrue = TMath::Log10((*simDat)->fEnergyGeV*0.001) ;
-    else { fErec = showDatM3D->fEnergy_GeV*0.001; }
+    else { fErec = showDat->fEnergy_GeV*0.001; }
 
     if((fEtrue<0.8)&&(fEtrue>0.64)) {xvsy->Fill(x,y);}
 
