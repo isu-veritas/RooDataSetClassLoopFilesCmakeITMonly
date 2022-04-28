@@ -1,0 +1,5 @@
+Compile in CMAKE and edit lines in the CMakeLists.txt that point to include and src directories.
+
+To compile:
+cmake ./ -DVEGAS_BASE_DIR=$VEGAS
+cmake --build .
